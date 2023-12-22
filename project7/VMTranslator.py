@@ -102,6 +102,8 @@ class CodeWriter:
             output.append("@SP")
             output.append("A=M-1")
             output.append(self.symbols[command])
+            output.append("@SP")
+            output.append("M=M+1")
 
         elif command in ["neg", "not"]:
             output.append("@SP")
@@ -135,12 +137,26 @@ class CodeWriter:
 
     def writePushPop(self, command, segment, index):
         output = []
+        # segment : argument, local, static, constant, this, that, pointer, temp
+
         if command == C_PUSH:
             if segment == "constant":
                 output.append("@" + str(index))
                 output.append("D=A")
                 output.append("@SP")
                 output.append("A=M")
+                output.append("M=D")
+                output.append("@SP")
+                output.append("M=M+1")
+
+            elif segment == "argument":
+                output.append("@" + str(index))
+                output.append("D=A")
+                output.append(self.symbols["argument"])
+                output.append("A=M+D")
+                output.append()
+
+            
 
 
         elif command == C_POP:
