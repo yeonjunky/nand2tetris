@@ -1,21 +1,26 @@
 @7
 D=A
 @SP
-AM=M+1
-A=A-1
+A=M
 M=D
+@SP
+M=M+1
 
 @8
 D=A
 @SP
-AM=M+1
-A=A-1
+A=M
 M=D
+@SP
+M=M+1
 
 @SP
 AM=M-1
 D=M
 @SP
 A=M-1
-M=D+M
+M=M+D
 
+(END)
+@END
+0;JMP

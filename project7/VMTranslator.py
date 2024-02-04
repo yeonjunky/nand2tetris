@@ -9,7 +9,7 @@ C_IF = 6
 C_FUNCTION = 7
 C_RETURN = 8
 C_CALL = 9
-ARITHMRTIC_CMDS = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
+CMDS = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
 
 
 class Parser:
@@ -35,7 +35,7 @@ class Parser:
     def commandType(self):
         op = self.curr_cmd.split(" ")[0]
 
-        if op in ARITHMRTIC_CMDS:
+        if op in CMDS:
             return C_ARITHMETIC
 
         elif op == "push":
@@ -64,10 +64,10 @@ class CodeWriter:
         self.file = open(filename, 'w')
 
         self.symbols = {
-            "add": "M=D+M",
-            "sub": "M=D-M",
-            "and": "M=D&M",
-            "or": "M=D|M",
+            "add": "M=M+D",
+            "sub": "M=M-D",
+            "and": "M=M&D",
+            "or": "M=M|D",
             "neg": "M=-M",
             "not": "M=!M",
             "eq": "D;JEQ",
@@ -78,8 +78,8 @@ class CodeWriter:
             "argument": "@ARG",
             "this": "@THIS",
             "that": "@THAT",
-            "pointer": "@3",
-            "temp": "@5"
+            "pointer": 3,
+            "temp": 5
         }
 
         self.label_cnt = 0
@@ -139,19 +139,70 @@ class CodeWriter:
             if segment == "constant":
                 output.append("@" + str(index))
                 output.append("D=A")
-                output.append("@SP")
-                output.append("A=M")
 
+            elif segment in ["local", "argument", "this", "that"]:
+                output.append(self.symbols[segment])
+                output.append("D=M")
+                output.append("@" + str(index))
+                output.append("A=D+A")
+                output.append("D=M")
+
+            elif segment in ["pointer", "temp"]:
+                output.append("@R" + str(self.symbols[segment] + int(index)))
+                output.append("D=M")
+                
+            elif segment == "static":
+                output.append("@" + self.filename + "." + str(index))
+                output.append("D=M")
+            
+            output.append("@SP")
+            output.append("A=M")
+            output.append("M=D")
+            output.append("@SP")
+            output.append("M=M+1")
 
         elif command == C_POP:
-            pass
+            if segment == "constant":
+                output.append("@" + str(index))
 
+            elif segment in ["local", "argument", "this", "that"]:
+                output.append(self.symbols[segment])
+                output.append("D=M")
+                output.append("@" + str(index))
+                output.append("A=A+D")
+
+            elif segment in ["pointer", "temp"]:
+                output.append("@R" + str(self.symbols[segment] + int(index)))
+                
+            elif segment == "static":
+                output.append("@" + self.filename + "." + str(index))
+
+            output.append("D=A")
+            output.append("@R13")
+            output.append("M=D")
+
+            output.append("@SP")
+            output.append("M=M-1")
+            output.append("A=M")
+            output.append("D=M")
+
+            output.append("@R13")
+            output.append("A=M")
+            output.append("M=D")
 
         output.append("")
 
         for line in output:
             print(line, file=self.file)
 
+    def endLoop(self):
+        output = []
+        output.append("(END)")
+        output.append("@END")
+        output.append("0;JMP")
+
+        for line in output:
+            print(line, file=self.file)
 
     def close(self):
         self.file.close()
@@ -177,6 +228,8 @@ def main():
         elif cmd_type in [C_POP, C_PUSH]:
             arg2 = parser.arg2()
             code_writer.writePushPop(cmd_type, arg1, arg2)
+
+    code_writer.endLoop()
 
     code_writer.close()
 
