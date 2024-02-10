@@ -1,4 +1,5 @@
 import sys
+import os
 
 C_ARITHMETIC = 1
 C_PUSH = 2
@@ -83,7 +84,7 @@ class CodeWriter:
         }
 
         self.label_cnt = 0
-        self.filename = filename[:-4]
+        self.filename = os.path.basename(filename)[:-4]
 
     @classmethod
     def setFileName(self, filename):
@@ -130,29 +131,17 @@ class CodeWriter:
 
         output.append("")
             
-        for line in output:
-            print(line, file=self.file)
+        self.writeLine(output, self.file)
 
     def writePushPop(self, command, segment, index):
         output = []
         if command == C_PUSH:
+            output.extend(self.memoryLocation(segment, index))
+
             if segment == "constant":
-                output.append("@" + str(index))
                 output.append("D=A")
 
-            elif segment in ["local", "argument", "this", "that"]:
-                output.append(self.symbols[segment])
-                output.append("D=M")
-                output.append("@" + str(index))
-                output.append("A=D+A")
-                output.append("D=M")
-
-            elif segment in ["pointer", "temp"]:
-                output.append("@R" + str(self.symbols[segment] + int(index)))
-                output.append("D=M")
-                
-            elif segment == "static":
-                output.append("@" + self.filename + "." + str(index))
+            elif segment in ["local", "argument", "this", "that", "pointer", "temp", "static"]:
                 output.append("D=M")
             
             output.append("@SP")
@@ -162,20 +151,7 @@ class CodeWriter:
             output.append("M=M+1")
 
         elif command == C_POP:
-            if segment == "constant":
-                output.append("@" + str(index))
-
-            elif segment in ["local", "argument", "this", "that"]:
-                output.append(self.symbols[segment])
-                output.append("D=M")
-                output.append("@" + str(index))
-                output.append("A=A+D")
-
-            elif segment in ["pointer", "temp"]:
-                output.append("@R" + str(self.symbols[segment] + int(index)))
-                
-            elif segment == "static":
-                output.append("@" + self.filename + "." + str(index))
+            output.extend(self.memoryLocation(segment, index))
 
             output.append("D=A")
             output.append("@R13")
@@ -192,8 +168,7 @@ class CodeWriter:
 
         output.append("")
 
-        for line in output:
-            print(line, file=self.file)
+        self.writeLine(output, self.file)
 
     def endLoop(self):
         output = []
@@ -201,12 +176,34 @@ class CodeWriter:
         output.append("@END")
         output.append("0;JMP")
 
+        self.writeLine(output, self.file)
+
+    def writeLine(self, output, file):
         for line in output:
-            print(line, file=self.file)
+            print(line, file=file)
 
     def close(self):
         self.file.close()
 
+    def memoryLocation(self, segment, index):
+        code = []
+
+        if segment == "constant":
+            code.append("@" + str(index))
+
+        elif segment in ["local", "argument", "this", "that"]:
+            code.append(self.symbols[segment])
+            code.append("D=M")
+            code.append("@" + str(index))
+            code.append("A=A+D")
+
+        elif segment in ["pointer", "temp"]:
+            code.append("@R" + str(self.symbols[segment] + int(index)))
+            
+        elif segment == "static":
+            code.append("@" + self.filename + "." + str(index))
+
+        return code
 
 def main():
     input_file = sys.argv[1]
