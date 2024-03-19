@@ -1,0 +1,29 @@
+class Board {
+    constructor Board new() {
+        return this;
+    }
+
+    function void drawBoard() {
+        do Screen.drawLine(100, 50, 100, 200);
+        do Screen.drawLine(150, 50, 150, 200);
+
+        do Screen.drawLine(50, 100, 200, 100);
+        do Screen.drawLine(50, 150, 200, 150);
+
+        return ;
+    }
+
+    function void showCurrLocation(int x, int y, boolean color) {
+        // calculate the top left and bottom right coordinate 
+        var int topX, topY, botX, botY;
+        let topX = (50 * x) + 1;
+        let topY = (50 * y) + 1;
+        let botX = (topX + 50) - 2;
+        let botY = (topY + 50) - 2;
+        do Screen.drawLine(topX, topY, topX, botY);
+        do Screen.drawLine(topX, botY, botX, botY);
+        do Screen.drawLine(topX, topY, botX, topY);
+        do Screen.drawLine(botX, topY, botX, botY);
+        return ;
+    }
+}
