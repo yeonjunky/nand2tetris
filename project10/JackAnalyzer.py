@@ -1,2 +1,7 @@
+import CompilationEngine
+
 class JackAnalyzer:
-    pass
+    def __init__(self) -> None:
+        self.compilationEngine = CompilationEngine()
+
+    

@@ -4,55 +4,72 @@ import re_patterns
 
 class JackTokenizer:
     def __init__(self, input_file):
-        self.lines = []
-
-        slash = -1
-        multi_comment = False
-        skip_line = False
+        self.code = None
 
         with open(input_file, 'r') as f:
-            for line in f.readlines():
-                line = line.strip()
+            self.code = f.read()
 
-                remove_single = re_patterns.single_comment.search(line)
+        self._clearComments()
 
-                if remove_single:
-                    line = line[0:remove_single.start()]
-
-                
-
-                if line == "":
-                    continue
-
-                if not multi_comment and not skip_line:
-                    self.lines.append(line)
-                    print(line)
-                skip_line = False
-
+        self._tokenType = None
+        self._currToken = None
+        self.rePatterns = [
+            re_patterns.keyword, 
+            re_patterns.symbol_pattern, 
+            re_patterns.identifier_pattern, 
+            re_patterns.int_const_pattern, 
+            re_patterns.str_const_pattern
+        ]
 
     def hasMoreTokens(self) -> bool:
+        if re_patterns.empty_text.fullmatch(self.code):
+            return False
         return True
 
     def advance(self) -> None:
-        return
+        for p in self.rePatterns:
+            match_result = p.match(self.code)
 
-    def tokenType(self) -> int:
-        return
+            if match_result:
+                pattern = p
+                break
+
+        self._currToken = match_result.group(1)
+        self.code = p.sub("", self.code, count=1)
+
+        if pattern == re_patterns.keyword:
+            self._tokenType = Tokentype.KEYWORD
+
+        elif pattern == re_patterns.symbol_pattern:
+            self._tokenType = Tokentype.SYMBOL
+
+        elif pattern == re_patterns.identifier_pattern:
+            self._tokenType = Tokentype.IDENTIFIER
+
+        elif pattern == re_patterns.int_const_pattern:
+            self._tokenType = Tokentype.INT_CONST
+
+        elif pattern == re_patterns.str_const_pattern:
+            self._tokenType = Tokentype.STRING_CONST
+
+    def tokenType(self) -> str:
+        return self._tokenType.name.lower()
     
     def keyword(self) -> int:
-        return
+        return self._currToken
 
     def symbol(self) -> str:
-        return
+        return self._currToken
 
     def identifier(self) -> str:
-        return
+        return self._currToken
 
     def intVal(self) -> int:
-        return
+        return int(self._currToken)
 
     def stringVal(self) -> str:
-        return
+        return self._currToken
+    
+    def _clearComments(self):
+        self.code = re_patterns.comment_pattern.sub("", self.code)
 
-
-j = JackTokenizer("./ArrayTest/Main.jack")
