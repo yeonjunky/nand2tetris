@@ -1,13 +1,17 @@
+import sys
+
 from JackTokenizer import JackTokenizer
-from Constants import Tokentype
 
 class CompilationEngine:
+    OP = ["+", "-", "*", "/", "<", ">", "&", "|", "="]
+
     def __init__(self, input_file, output_file):
         self.tokenizer = JackTokenizer(input_file)
         self.output_file = open(output_file, 'w')
 
         self.tokenType = None
         self.closing_stack = []
+        self.indentLevel = 0
         self.method_dict = {
             'method': self.compileSubroutine,
             'function': self.compileSubroutine,
@@ -35,72 +39,87 @@ class CompilationEngine:
 
     def compileClass(self) -> None:
         self.write("<class>\n")
+        self.indentLevel += 1
+
+        self._advance()
 
         # keyword 'class'
-        self._advance()
-        self.write("<" + self.tokenType + "> " 
-                   + self.getToken())
-        self.write(" </" + self.tokenType + ">\n")
-
+        self._writeKeyword()
         self._advance()
 
         # identifier "className"
-        self.write("<" + self.tokenType + "> "
-                   + self.getToken())
-        self.write(" </" + self.tokenType + ">\n")
+        self._writeIdentifier()
+        self._advance()
 
         while self.tokenizer.hasMoreTokens():
-            self._advance()
             tokenType = self.tokenizer.tokenType()
 
             if tokenType == "keyword":
-                keyword = self.getToken()
-                self.method_dict[keyword]()
+                token = self.getToken()
+                self.method_dict[token]()
 
             elif tokenType == "symbol":
-                self.handleSymbol()
+                self._writeSymbol()
+                self._advance()
 
+            elif tokenType == "identifier":
+                self._writeIdentifier()
+                self._advance()
+
+        self._writeSymbol()
+
+        self.indentLevel -= 1
         self.write("</class>")
 
 
     def compileClassVarDec(self) -> None:
-        pass
+        self.write("<classVarDec>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeIdentifier()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.indentLevel -= 1
+        self.write("</classVarDec>\n")
 
 
     def compileSubroutine(self) -> None:
-        self.write("<SubroutineDec>\n")
+        self.write("<subroutineDec>\n")
+        self.indentLevel += 1
 
         # function, method, constructor
-        self.write("<" + self.tokenType + "> "
-                   + self.getToken())
-        self.write(" </" + self.tokenType + ">\n")
-
+        self._writeKeyword()
         self._advance()
 
         # type
-        self.write("<" + self.tokenType + "> "
-                   + self.getToken())
-        self.write(" </" + self.tokenType + ">\n")
-
+        self._writeKeyword()
         self._advance()
 
         # funcName
-        self.write("<" + self.tokenType + "> "
-                   + self.getToken())
-        self.write(" </" + self.tokenType + ">\n")
-
+        self._writeIdentifier()
         self._advance()
 
-        self.handleSymbol()
-
+        self._writeSymbol()
         self._advance()
+
         self.compileParameterList()
 
-        self.write("<subroutineBody>\n")
-
+        self._writeSymbol()
         self._advance()
-        self.handleSymbol()
 
+        self.write("<subroutineBody>\n")
+        self.indentLevel += 1
+
+        self._writeSymbol()
         self._advance()
 
         while self.tokenType != "symbol":
@@ -111,16 +130,20 @@ class CompilationEngine:
             else:
                 self.method_dict[keyword]()
 
-            self._advance()
+        self._writeSymbol()
+        self._advance()
 
-        self.handleSymbol()
-
+        self.indentLevel -= 1
         self.write("</subroutineBody>\n")
 
+        self.indentLevel -= 1
+        self.write("</subroutineDec>\n")
 
 
     def compileParameterList(self) -> None:
+        #TODO: while 문 고치기
         self.write("<parameterList>\n")
+        self.indentLevel += 1
 
         while self.tokenType != "symbol":
             
@@ -130,86 +153,322 @@ class CompilationEngine:
 
             self._advance()
 
+        self.indentLevel -= 1
         self.write("</parameterList>\n")
-
-        self.handleSymbol()
 
 
     def compileVarDec(self) -> None:
         self.write("<varDec>\n")
-        keyword = self.getToken()
+        self.indentLevel += 1
+        symbol = ""
 
-        while keyword != ";":
-            if self.tokenType == "symbol":
-                self.handleSymbol()
+        self._writeKeyword()
+        self._advance()
 
-            else:
-                self.write("<" + self.tokenType + ">")
-                self.write(" " + keyword + " ")
-                self.write("</" + self.tokenType + ">\n")
+        if self.tokenType == "identifier":
+            self._writeIdentifier()
 
+        elif self.tokenType == "keyword":
+            self._writeKeyword()
+
+        self._advance()
+
+        while symbol != ";":
+            self._writeIdentifier()
             self._advance()
-            keyword = self.getToken()
 
-        self.handleSymbol()
+            symbol = self.tokenizer.symbol()
 
+            if symbol == ",":
+                self._writeSymbol()
+                self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.indentLevel -= 1
         self.write("</varDec>\n")
 
 
     def compileStatements(self) -> None:
-        keyword = self.getToken()
+        token = self.getToken()
 
         self.write("<statements>\n")
+        self.indentLevel += 1
 
-        while keyword in self.statements:
-            self.method_dict[keyword]()
+        while token in self.statements:
+            self.method_dict[token]()
 
+            token = self.getToken()
+
+        self.indentLevel -= 1
         self.write("</statements>\n")
 
 
     def compileDo(self) -> None:
-        pass
+        self.write("<doStatement>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeIdentifier()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self._writeIdentifier()
+        self._advance()
+
+        self._writeSymbol()
+        self.compileExpressionList()
+
+        self._writeSymbol()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.indentLevel -= 1
+        self.write("</doStatement>\n")
 
 
     def compileLet(self) -> None:
-        pass
+        token = self.getToken()
+
+        self.write("<letStatement>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeIdentifier()
+        self._advance()
+
+        if self.tokenType == "symbol" and self.tokenizer.symbol() == "[":
+            self._writeSymbol()
+            self._advance()
+
+            self.compileExpression()
+
+            self._writeSymbol()
+            self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.compileExpression()
+
+        # semicolon
+        self._writeSymbol()
+        self._advance()
+
+        self.indentLevel -= 1
+        self.write("</letStatement>\n")
 
 
     def compileWhile(self) -> None:
-        pass
+        self.write("<whileStatement>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.compileExpression()
+
+        self._writeSymbol()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.compileStatements()
+
+        self._writeSymbol()
+        self._advance()
+        self.indentLevel -= 1
+        self.write("</whileStatement>\n")
 
 
     def compileReturn(self) -> None:
-        pass
+        self.write("<returnStatement>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.indentLevel -= 1
+        self.write("</returnStatement>\n")
 
 
     def compileIf(self) -> None:
-        pass
+        self.write("<ifStatement>\n")
+        self.indentLevel += 1
+
+        self._writeKeyword()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.compileExpression()
+
+        self._writeSymbol()
+        self._advance()
+
+        self._writeSymbol()
+        self._advance()
+
+        self.compileStatements()
+
+        self._writeSymbol()
+        self._advance()
+
+        if self.tokenType == "keyword" and self.tokenizer.keyword() == "else":
+            self._writeKeyword()
+            self._advance()
+
+            self._writeSymbol()
+            self._advance()
+
+            self.compileStatements()
+
+            self._writeSymbol()
+            self._advance()
+        
+        self.indentLevel -= 1
+        self.write("</ifStatement>\n")
 
 
     def compileExpression(self) -> None:
-        pass
+        self.write("<expression>\n")
+        self.indentLevel += 1
+
+        self.compileTerm()
+
+        while self.tokenizer.symbol() in self.OP:
+            self._writeSymbol()
+            self._advance()
+
+            self.compileTerm()
+
+        self.indentLevel -= 1
+        self.write("</expression>\n")
 
 
     def compileTerm(self) -> None:
-        pass
+        self.write("<term>\n")
+        self.indentLevel += 1
+
+        if self.tokenType in ["int_const", "string_const"]:
+            self._writeConstant()
+            self._advance()
+
+        if self.tokenType == "keyword":
+            self._writeKeyword()
+            self._advance()
+
+        elif self.tokenType == "identifier":
+            self._writeIdentifier()
+            self._advance()
+
+            if self.tokenType == "symbol":
+                symbol = self.tokenizer.symbol()
+
+                if symbol == "[":
+                    self._writeSymbol()
+                    self._advance()
+
+                    self.compileExpression()
+
+                    self._writeSymbol()
+                    self._advance()
+                
+                elif symbol == "(":
+                    self._writeSymbol()
+                    self.compileExpressionList()
+
+                    self._writeSymbol()
+                    self._advance()
+
+                elif symbol == ".":
+                    self._writeSymbol()
+
+                    self._advance()
+                    self._writeIdentifier()
+
+                    self._advance()
+                    self._writeSymbol()
+
+                    self.compileExpressionList()
+
+                    self._writeSymbol()
+                    self._advance()
+
+        self.indentLevel -= 1
+        self.write("</term>\n")
 
 
-    def complileExpressionList(self) -> None:
-        pass
+    def compileExpressionList(self) -> None:
+        is_empty = False
+        prevType = self.tokenType
+        symbol = self.tokenizer.symbol()
+
+        self.write("<expressionList>\n")
+        self.indentLevel += 1
+
+        self._advance()
+
+        if self.tokenType == 'symbol' and self.tokenizer.symbol() == ")":
+            is_empty = True
+
+        if prevType == 'symbol' and symbol != "(":
+            if not is_empty:
+                self.compileExpression()
+
+                while self.tokenType == 'symbol' and symbol == ",":
+                    self._writeSymbol()
+                    self._advance()
+                    self.compileExpression()
+
+        if prevType == 'symbol' and symbol == "(":
+            if not is_empty:
+                self.compileExpression()
+
+        self.indentLevel -= 1
+        self.write("</expressionList>\n")
 
 
-    def write(self, line):
-        # self.output_file.write(
-        #     line
-        # )
+
+    def write(self, line, indent=True):
+        if indent:
+            line = str("  " * self.indentLevel) + line
+
+        self.output_file.write(
+            str(line)
+        )
+
         print(line, end="")
 
 
-    def handleSymbol(self):
+    def _writeSymbol(self):
+        symbol = self.tokenizer.symbol()
+
+        if symbol == "<":
+            symbol = "&lt;"
+        elif symbol == ">":
+            symbol = "&gt;"
+
         self.write("<" + self.tokenizer.tokenType() + "> "
-                   + self.tokenizer.symbol())
-        self.write(" </" + self.tokenizer.tokenType() + ">\n")
+                   + symbol)
+        self.write(" </" + self.tokenizer.tokenType() + ">\n", indent=False)
 
 
     def getToken(self):
@@ -237,4 +496,31 @@ class CompilationEngine:
         self.tokenizer.advance()
         self._updateTokenType()
 
-c = CompilationEngine("./ArrayTest/Main.jack", "./ArrayTest/Main.xml")
+    
+    def _writeKeyword(self):
+        self.write("<keyword> ")
+        self.write(self.tokenizer.keyword(), indent=False)
+        self.write(" </keyword>\n", indent=False)
+
+    def _writeIdentifier(self):
+        self.write("<identifier> ")
+        self.write(self.tokenizer.identifier(), indent=False)
+        self.write(" </identifier>\n", indent=False)
+
+    def _writeConstant(self):
+        if self.tokenType == "string_const":
+            type = "stringConstant"
+            token = self.tokenizer.stringVal()
+
+        elif self.tokenType == "int_const":
+            type = "integerConstant"
+            token = self.tokenizer.intVal()
+
+        self.write("<" + type + "> ")
+        self.write(token, indent=False)
+        self.write(" </" + type + ">\n", indent=False)
+        
+
+
+
+c = CompilationEngine(sys.argv[1], sys.argv[2])
