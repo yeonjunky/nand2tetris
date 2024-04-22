@@ -69,24 +69,34 @@ class CompilationEngine:
         self._writeSymbol()
 
         self.indentLevel -= 1
-        self.write("</class>")
+        self.write("</class>\n")
 
 
     def compileClassVarDec(self) -> None:
+        symbol = ""
+
         self.write("<classVarDec>\n")
         self.indentLevel += 1
 
         self._writeKeyword()
         self._advance()
 
-        self._writeKeyword()
+        if self.tokenType == "identifier":
+            self._writeIdentifier()
+
+        elif self.tokenType == "keyword":
+            self._writeKeyword()
+
         self._advance()
 
-        self._writeIdentifier()
-        self._advance()
+        while symbol != ";":
+            self._writeIdentifier()
+            self._advance()
 
-        self._writeSymbol()
-        self._advance()
+            symbol = self.tokenizer.symbol()
+
+            self._writeSymbol()
+            self._advance()
 
         self.indentLevel -= 1
         self.write("</classVarDec>\n")
@@ -101,7 +111,10 @@ class CompilationEngine:
         self._advance()
 
         # type
-        self._writeKeyword()
+        if self.tokenType == "keyword":
+            self._writeKeyword()
+        elif self.tokenType == "identifier":
+            self._writeIdentifier()
         self._advance()
 
         # funcName
@@ -141,17 +154,31 @@ class CompilationEngine:
 
 
     def compileParameterList(self) -> None:
-        #TODO: while 문 고치기
         self.write("<parameterList>\n")
         self.indentLevel += 1
 
-        while self.tokenType != "symbol":
-            
-            self.write("<" + self.tokenType + "> "
-                       + self.getToken())
-            self.write(" </" + self.tokenType + ">\n")
+        symbol = ""
+        isCloseParen = False
 
+        if self.tokenType == "symbol" and self.tokenizer.symbol() == ")":
+            isCloseParen = True
+
+        while not isCloseParen:
+            self._writeKeyword()
             self._advance()
+
+            self._writeIdentifier()
+            self._advance()
+
+            symbol = self.tokenizer.symbol()
+            isCloseParen = True if symbol == ")" else False
+
+            if isCloseParen:
+                break
+
+            self._writeSymbol()
+            self._advance()
+
 
         self.indentLevel -= 1
         self.write("</parameterList>\n")
@@ -179,12 +206,8 @@ class CompilationEngine:
 
             symbol = self.tokenizer.symbol()
 
-            if symbol == ",":
-                self._writeSymbol()
-                self._advance()
-
-        self._writeSymbol()
-        self._advance()
+            self._writeSymbol()
+            self._advance()
 
         self.indentLevel -= 1
         self.write("</varDec>\n")
@@ -215,11 +238,14 @@ class CompilationEngine:
         self._writeIdentifier()
         self._advance()
 
-        self._writeSymbol()
-        self._advance()
+        symbol = self.tokenizer.symbol()
 
-        self._writeIdentifier()
-        self._advance()
+        if symbol == ".":
+            self._writeSymbol()
+            self._advance()
+
+            self._writeIdentifier()
+            self._advance()
 
         self._writeSymbol()
         self.compileExpressionList()
@@ -301,6 +327,9 @@ class CompilationEngine:
         self._writeKeyword()
         self._advance()
 
+        if self.tokenType != "symbol":
+            self.compileExpression()
+
         self._writeSymbol()
         self._advance()
 
@@ -371,7 +400,7 @@ class CompilationEngine:
             self._writeConstant()
             self._advance()
 
-        if self.tokenType == "keyword":
+        elif self.tokenType == "keyword":
             self._writeKeyword()
             self._advance()
 
@@ -412,6 +441,24 @@ class CompilationEngine:
                     self._writeSymbol()
                     self._advance()
 
+        elif self.tokenType == "symbol":
+            symbol = self.tokenizer.symbol()
+
+            if symbol == "(":
+                self._writeSymbol()
+                self._advance()
+
+                self.compileExpression()
+
+                self._writeSymbol()
+                self._advance()
+
+            elif symbol in ["~", "-"]:
+                self._writeSymbol()
+                self._advance()
+
+                self.compileTerm()
+
         self.indentLevel -= 1
         self.write("</term>\n")
 
@@ -442,6 +489,17 @@ class CompilationEngine:
             if not is_empty:
                 self.compileExpression()
 
+                if self.tokenType == "symbol":
+                    symbol = self.tokenizer.symbol()
+
+                while self.tokenType == 'symbol' and symbol == ",":
+                    self._writeSymbol()
+                    self._advance()
+                    self.compileExpression()
+
+                    if self.tokenType == "symbol":
+                        symbol = self.tokenizer.symbol()
+
         self.indentLevel -= 1
         self.write("</expressionList>\n")
 
@@ -455,7 +513,7 @@ class CompilationEngine:
             str(line)
         )
 
-        print(line, end="")
+        # print(line, end="")
 
 
     def _writeSymbol(self):
@@ -465,6 +523,8 @@ class CompilationEngine:
             symbol = "&lt;"
         elif symbol == ">":
             symbol = "&gt;"
+        elif symbol == "&":
+            symbol = "&amp;"
 
         self.write("<" + self.tokenizer.tokenType() + "> "
                    + symbol)
@@ -519,8 +579,5 @@ class CompilationEngine:
         self.write("<" + type + "> ")
         self.write(token, indent=False)
         self.write(" </" + type + ">\n", indent=False)
-        
 
 
-
-c = CompilationEngine(sys.argv[1], sys.argv[2])
