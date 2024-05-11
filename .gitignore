@@ -1,3 +1,4 @@
 *.manifest
 *.sh
 __pycache__/
+project11/*/*.xml
