@@ -20,8 +20,7 @@ class SymbolTable:
         print("subroutine table cleared!")
 
 
-    def define(self, name, type, kind) -> None:
-        print(kind, type, name)
+    def define(self, name:str, type:str, kind:Kind) -> None:
         if kind == Kind.STATIC:
             idx = self.classMemCnt[0]
             self.classMemCnt[0] += 1
@@ -43,7 +42,7 @@ class SymbolTable:
             self.classTable[name] = [type, kind, idx]
 
 
-    def varCount(self, kind) -> int:
+    def varCount(self, kind:Kind) -> int:
         if kind == Kind.STATIC:
             return self.classMemCnt[0]
             
@@ -57,19 +56,28 @@ class SymbolTable:
             return self.subroutineMemCnt[1]
             
 
-    def kindOf(self, name):
+    def kindOf(self, name:str) -> Kind:
         var = self.classTable.get(name)
         var = var if var else self.subroutineTable.get(name)
+
+        if var is None:
+            return None
         return var[1]
 
 
-    def typeOf(self, name):
+    def typeOf(self, name:str) -> str:
         var = self.classTable.get(name)
         var = var if var else self.subroutineTable.get(name)
+        
+        if var is None:
+            return None
         return var[0]
 
 
-    def indexOf(self, name):
+    def indexOf(self, name:str) -> int:
         var = self.classTable.get(name)
         var = var if var else self.subroutineTable.get(name)
+
+        if var is None:
+            return None
         return var[2]
