@@ -21,6 +21,8 @@ class CompilationEngine:
         self.indentLevel = 0
         self.isExpList = False
         self.labelCnt = 0
+        self.isVoid = False
+        self.voidSubroutines = []
 
         self.method_dict = {
             'method': self.compileSubroutine,
@@ -93,8 +95,9 @@ class CompilationEngine:
 
         # kind
         self._writeKeyword()
+        keyword = self.tokenizer.keyword()
+        kind = self._getKeyWordKind(keyword)
         self._advance()
-        kind = self.tokenizer.keyword()
 
         if self.tokenType == "identifier": # classType
             type = self.tokenizer.identifier()
@@ -124,8 +127,6 @@ class CompilationEngine:
     def compileSubroutine(self) -> None:
         self.write("<subroutineDec>\n")
         self.indentLevel += 1
-        varDecCnt = 0
-        isVoid = False
 
         self.symbolTable.startSubroutine()
 
@@ -134,12 +135,12 @@ class CompilationEngine:
         self._writeKeyword()
         self._advance()
 
-        # type
+        # return type
         if self.tokenType == "keyword":
             returnType = self.tokenizer.keyword()
 
             if returnType == "void":
-                isVoid = True
+                self.isVoid = True
             self._writeKeyword()
 
         elif self.tokenType == "identifier":
@@ -155,6 +156,8 @@ class CompilationEngine:
         self._writeSymbol()
         self._advance()
 
+        if funcType == "method":
+            self.symbolTable.define("this", self.className, self._getKeyWordKind("arg"))
         self.compileParameterList()
 
         self._writeSymbol()
@@ -174,6 +177,16 @@ class CompilationEngine:
         nLocals = self.symbolTable.varCount(Kind.VAR)
         self.vmWriter.writeFunction(funcName, nLocals)
 
+        if funcType == "constructor":
+            fieldVarNum = self.symbolTable.varCount(Kind.FIELD)
+            self.vmWriter.writePush("constant", fieldVarNum)
+            self.vmWriter.writeCall("Memory.alloc", 1)
+            self.vmWriter.writePop("pointer", 0)
+
+        elif funcType == "method":
+            self.vmWriter.writePush("argument", 0)
+            self.vmWriter.writePop("pointer", 0)
+
         while self.tokenType != "symbol":
             keyword = self.tokenizer.keyword()
 
@@ -181,6 +194,8 @@ class CompilationEngine:
                 self.compileStatements()
             else:
                 self.method_dict[keyword]()
+
+        self.isVoid = False
 
         # }
         self._writeSymbol()
@@ -213,7 +228,7 @@ class CompilationEngine:
             self._writeIdentifier()
             self._advance()
 
-            # self.symbolTable.define(name, type, kind)
+            self.symbolTable.define(name, type, kind)
 
             symbol = self.tokenizer.symbol()
             isCloseParen = True if symbol == ")" else False
@@ -223,7 +238,6 @@ class CompilationEngine:
 
             self._writeSymbol()
             self._advance()
-
 
         self.indentLevel -= 1
         self.write("</parameterList>\n")
@@ -282,6 +296,7 @@ class CompilationEngine:
     def compileDo(self) -> None:
         self.write("<doStatement>\n")
         self.indentLevel += 1
+        nArgs = 0
 
         self._writeKeyword()
         self._advance()
@@ -293,6 +308,16 @@ class CompilationEngine:
         symbol = self.tokenizer.symbol()
 
         if symbol == ".":
+            varIdx = self.symbolTable.indexOf(name)
+
+            if varIdx != None:
+                varKind = self.symbolTable.kindOf(name)
+                name = self.symbolTable.typeOf(name)
+                varSegment = self._kindToSegment(varKind)
+                nArgs = 1
+
+                self.vmWriter.writePush(varSegment, varIdx)
+
             self._writeSymbol()
             name += self.tokenizer.symbol()
             self._advance()
@@ -301,8 +326,13 @@ class CompilationEngine:
             name += self.tokenizer.identifier()
             self._advance()
 
+        else:
+            self.vmWriter.writePush("pointer", 0)
+            name = self.className + "." + name
+            nArgs = 1
+
         self._writeSymbol()
-        nArgs = self.compileExpressionList()
+        nArgs += self.compileExpressionList()
 
         self._writeSymbol()
         self._advance()
@@ -311,6 +341,7 @@ class CompilationEngine:
         self._advance()
 
         self.vmWriter.writeCall(name, nArgs)
+        self.vmWriter.writePop("temp", 0)
 
         self.indentLevel -= 1
         self.write("</doStatement>\n")
@@ -319,6 +350,7 @@ class CompilationEngine:
     def compileLet(self) -> None:
         self.write("<letStatement>\n")
         self.indentLevel += 1
+        arrOp = False
 
         # let keyword
         self._writeKeyword()
@@ -329,13 +361,13 @@ class CompilationEngine:
         
         varName = self.tokenizer.identifier()
         varIdx = self.symbolTable.indexOf(varName)
-
         varKind = self.symbolTable.kindOf(varName)
         varSegment = self._kindToSegment(varKind)
 
         self._advance()
 
         if self.tokenType == "symbol" and self.tokenizer.symbol() == "[":
+            arrOp = True
             self.vmWriter.writePush(varSegment, varIdx)
 
             self._writeSymbol()
@@ -347,7 +379,7 @@ class CompilationEngine:
             self._advance()
 
             self.vmWriter.writeArithmetic(Command.ADD)
-            self.vmWriter.writePop("pointer", 1)
+            self.vmWriter.writePop("temp", 0)
 
             varSegment = "that"
             varIdx = 0
@@ -358,6 +390,10 @@ class CompilationEngine:
 
         # right expression
         self.compileExpression()
+
+        if arrOp:
+            self.vmWriter.writePush("temp", 0)
+            self.vmWriter.writePop("pointer", 1)
 
         self.vmWriter.writePop(varSegment, varIdx)
 
@@ -373,12 +409,10 @@ class CompilationEngine:
         self.write("<whileStatement>\n")
         self.indentLevel += 1
 
-        loopLabel = "LABEL_" + str(self.labelCnt)
-        self.labelCnt += 1
-        escapeLabel = "LABEL_" + str(self.labelCnt)
+        loopLabel = self._newLabel()
+        escapeLabel = self._newLabel()
 
         self.vmWriter.writeLabel(loopLabel)
-
 
         self._writeKeyword()
         self._advance()
@@ -416,7 +450,10 @@ class CompilationEngine:
         self._writeKeyword()
         self._advance()
 
-        if self.tokenType != "symbol":
+        if self.isVoid:
+            self.vmWriter.writePush("constant", 0)
+
+        elif self.tokenType != "symbol":
             self.compileExpression()
 
         self._writeSymbol()
@@ -431,6 +468,8 @@ class CompilationEngine:
     def compileIf(self) -> None:
         self.write("<ifStatement>\n")
         self.indentLevel += 1
+        trueLabel = self._newLabel()
+        falseLabel = self._newLabel()
 
         self._writeKeyword()
         self._advance()
@@ -439,17 +478,23 @@ class CompilationEngine:
         self._advance()
 
         self.compileExpression()
+        self.vmWriter.writeArithmetic(Command.NOT)
 
         self._writeSymbol()
         self._advance()
 
         self._writeSymbol()
         self._advance()
+
+        self.vmWriter.writeIf(falseLabel)
 
         self.compileStatements()
+        self.vmWriter.writeGoto(trueLabel)
 
         self._writeSymbol()
         self._advance()
+
+        self.vmWriter.writeLabel(falseLabel)
 
         if self.tokenType == "keyword" and self.tokenizer.keyword() == "else":
             self._writeKeyword()
@@ -462,6 +507,8 @@ class CompilationEngine:
 
             self._writeSymbol()
             self._advance()
+
+        self.vmWriter.writeLabel(trueLabel)
         
         self.indentLevel -= 1
         self.write("</ifStatement>\n")
@@ -476,14 +523,17 @@ class CompilationEngine:
         while self.tokenizer.symbol() in self.OP:
             self._writeSymbol()
             symbol = self.tokenizer.symbol()
-            op = self._symToCommand(symbol)
 
             self._advance()
 
             self.compileTerm()
 
-            self.vmWriter.writeArithmetic(op)
+            if symbol in ["*", "/"]:
+                self._mathOp(symbol)
 
+            else:
+                op = self._symToCommand(symbol)
+                self.vmWriter.writeArithmetic(op)
 
         self.indentLevel -= 1
         self.write("</expression>\n")
@@ -499,6 +549,21 @@ class CompilationEngine:
 
         elif self.tokenType == "keyword":
             self._writeKeyword()
+            keyword = self.tokenizer.keyword()
+
+            if keyword == "null":
+                self.vmWriter.writePush("constant", 0)
+
+            elif keyword == "this": # return this
+                self.vmWriter.writePush("pointer", 0)
+
+            elif keyword == "true":
+                self.vmWriter.writePush("constant", 0)
+                self.vmWriter.writeArithmetic(Command.NOT)
+
+            elif keyword == "false":
+                self.vmWriter.writePush("constant", 0)
+
             self._advance()
 
         elif self.tokenType == "identifier": 
@@ -534,12 +599,27 @@ class CompilationEngine:
                 
                 elif symbol == "(": # method call
                     self._writeSymbol()
-                    self.compileExpressionList()
+
+                    self.vmWriter.writePush("pointer", 0)
+
+                    nArgs = self.compileExpressionList() + 1
+                    self.vmWriter.writeCall(self.className + "." + name, nArgs)
 
                     self._writeSymbol()
                     self._advance()
 
                 elif symbol == ".": # className.subroutineName(expList)
+                    nArgs = 0
+                    varIdx = self.symbolTable.indexOf(name)
+
+                    if varIdx != None:
+                        varKind = self.symbolTable.kindOf(name)
+                        varSegment = self._kindToSegment(varKind)
+                        name = self.symbolTable.typeOf(name)
+                        nArgs = 1
+
+                        self.vmWriter.writePush(varSegment, varIdx)
+
                     name += self.tokenizer.symbol()
                     self._writeSymbol()
 
@@ -551,7 +631,7 @@ class CompilationEngine:
                     self._advance()
                     self._writeSymbol()
 
-                    nArgs = self.compileExpressionList()
+                    nArgs += self.compileExpressionList()
                     self.vmWriter.writeCall(name, nArgs)
 
                     # )
@@ -564,7 +644,6 @@ class CompilationEngine:
                     varIdx = self.symbolTable.indexOf(name)
 
                     self.vmWriter.writePush(varSegment, varIdx)
-
 
 
         elif self.tokenType == "symbol": # '(' expression ')' | unary op
@@ -581,9 +660,12 @@ class CompilationEngine:
 
             elif symbol in ["~", "-"]:
                 self._writeSymbol()
+                symbol = self.tokenizer.symbol()
+                command = self._symToCommand(symbol, unary=True)
                 self._advance()
 
                 self.compileTerm()
+                self.vmWriter.writeArithmetic(command)
 
         self.indentLevel -= 1
         self.write("</term>\n")
@@ -637,15 +719,15 @@ class CompilationEngine:
         return nArgs
 
     def write(self, line, indent=True):
-        if indent:
-            line = str("  " * self.indentLevel) + line
+        # if indent:
+        #     line = str("  " * self.indentLevel) + line
 
-        self.output_file.write(
-            str(line)
-        )
+        # self.output_file.write(
+        #     str(line)
+        # )
 
         # print(line, end="")
-        # pass
+        pass
 
 
     def _writeSymbol(self):
@@ -751,30 +833,43 @@ class CompilationEngine:
         elif kind == "var":
             return "local"
         
-    def _symToCommand(self, symbol:str) -> Command:
-        if symbol == "+":
-            return Command.ADD
+    def _symToCommand(self, symbol:str, unary:bool=False) -> Command:
+        if unary:
+            if symbol == "-":
+                return Command.NEG
+            
+            elif symbol == "~":
+                return Command.NOT 
 
-        elif symbol == "-":
-            return Command.SUB
+        else:
+            if symbol == "+":
+                return Command.ADD
 
-        elif symbol == "~":
-            return Command.NEG
+            elif symbol == "-":
+                return Command.SUB
+            elif symbol == "=":
+                return Command.EQ
+            
+            elif symbol == ">":
+                return Command.GT
+            
+            elif symbol == "<":
+                return Command.LT
+            
+            elif symbol == "&":
+                return Command.AND
+            
+            elif symbol == "|":
+                return Command.OR
 
-        elif symbol == "=":
-            return Command.EQ
         
-        elif symbol == ">":
-            return Command.GT
-        
-        elif symbol == "<":
-            return Command.LT
-        
-        elif symbol == "&":
-            return Command.AND
-        
-        elif symbol == "|":
-            return Command.OR
-        
-        elif symbol == "~":
-            return Command.NOT
+    def _newLabel(self):
+        label = "LABEL" + str(self.labelCnt)
+        self.labelCnt += 1
+        return label
+
+    def _mathOp(self, op):
+        if op == "*":
+            self.vmWriter.writeCall("Math.multiply", 2)
+        elif op == "/":
+            self.vmWriter.writeCall("Math.divide", 2)

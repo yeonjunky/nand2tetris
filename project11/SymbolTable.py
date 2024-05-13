@@ -8,16 +8,15 @@ class SymbolTable:
         # value -> [type, kind, index]
 
         self.classTable = {}
-        self.classMemCnt = [] # static, field
+        self.classMemCnt = [0, 0] # static, field
 
         self.subroutineTable = {}
-        self.subroutineMemCnt = [] # arg, var
+        self.subroutineMemCnt = [0, 0] # arg, var
         
 
     def startSubroutine(self) -> None:
         self.subroutineTable.clear()
         self.subroutineMemCnt = [0, 0]
-        print("subroutine table cleared!")
 
 
     def define(self, name:str, type:str, kind:Kind) -> None:
@@ -34,12 +33,12 @@ class SymbolTable:
         elif kind == Kind.ARG:
             idx = self.subroutineMemCnt[0]
             self.subroutineMemCnt[0] += 1
-            self.classTable[name] = [type, kind, idx]
+            self.subroutineTable[name] = [type, kind, idx]
 
         elif kind == Kind.VAR:
             idx = self.subroutineMemCnt[1]
             self.subroutineMemCnt[1] += 1
-            self.classTable[name] = [type, kind, idx]
+            self.subroutineTable[name] = [type, kind, idx]
 
 
     def varCount(self, kind:Kind) -> int:
