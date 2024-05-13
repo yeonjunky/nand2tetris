@@ -55,7 +55,7 @@ class JackTokenizer:
     def tokenType(self) -> str:
         return self._tokenType.name.lower()
     
-    def keyword(self) -> int:
+    def keyword(self) -> str:
         return self._currToken
 
     def symbol(self) -> str:
