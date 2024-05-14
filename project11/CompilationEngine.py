@@ -1,9 +1,7 @@
-import sys
-
 from JackTokenizer import JackTokenizer
 from SymbolTable import SymbolTable
 from VMWriter import VMWriter
-from Constants import Kind, Segment, Command, Tokentype
+from Constants import Kind, Command
 
 class CompilationEngine:
     OP = ["+", "-", "*", "/", "<", ">", "&", "|", "="]
